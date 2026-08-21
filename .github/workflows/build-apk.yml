@@ -46,6 +46,46 @@ jobs:
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
           echo "Using Gradle project at $PROJECT_DIR"
 
+      - name: Fix MainActivity TextView helper
+        shell: bash
+        run: |
+          PROJECT_DIR="${{ steps.locate.outputs.project_dir }}"
+          MAIN=$(find "$PROJECT_DIR/app/src/main/java" -type f -name MainActivity.java | head -n 1)
+          if [ -z "$MAIN" ]; then
+            echo "MainActivity.java not found"
+            exit 1
+          fi
+          python3 - "$MAIN" <<'PY'
+          import pathlib, sys
+
+          path = pathlib.Path(sys.argv[1])
+          src = path.read_text(encoding="utf-8")
+
+          signature = "TextView tv(String text, int sizeSp, boolean bold)"
+          if signature not in src:
+              method = r'''
+
+              private TextView tv(String text, int sizeSp, boolean bold) {
+                  TextView view = new TextView(this);
+                  view.setText(text);
+                  view.setTextSize(sizeSp);
+                  view.setPadding(8, 8, 8, 8);
+                  if (bold) {
+                      view.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                  }
+                  return view;
+              }
+          '''
+              pos = src.rfind("}")
+              if pos < 0:
+                  raise SystemExit("Could not find class closing brace in MainActivity.java")
+              src = src[:pos] + method + src[pos:]
+              path.write_text(src, encoding="utf-8")
+              print("Added tv(String, int, boolean) overload to", path)
+          else:
+              print("TextView helper already present")
+          PY
+
       - name: Fix Android SDK level
         shell: bash
         run: |
