@@ -46,6 +46,18 @@ jobs:
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
           echo "Using Gradle project at $PROJECT_DIR"
 
+      - name: Fix Android SDK level
+        shell: bash
+        run: |
+          PROJECT_DIR="${{ steps.locate.outputs.project_dir }}"
+          echo "Patching compileSdk to 35 if needed..."
+          find "$PROJECT_DIR" -type f \( -name 'build.gradle' -o -name 'build.gradle.kts' \) -print0 | while IFS= read -r -d '' FILE; do
+            sed -i -E 's/(compileSdkVersion[[:space:]]+)[0-9]+/\135/g' "$FILE"
+            sed -i -E 's/(compileSdk[[:space:]]*=[[:space:]]*)[0-9]+/\135/g' "$FILE"
+            sed -i -E 's/(compileSdk[[:space:]]+)[0-9]+/\135/g' "$FILE"
+          done
+          grep -RInE 'compileSdk|compileSdkVersion' "$PROJECT_DIR" --include='build.gradle' --include='build.gradle.kts' || true
+
       - name: Build debug APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: gradle assembleDebug --stacktrace
