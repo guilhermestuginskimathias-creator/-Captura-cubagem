@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-      - fix/android-build
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -24,6 +20,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
       - name: Extract Android project
         run: |
           rm -rf extracted-project
@@ -36,19 +37,18 @@ jobs:
         id: locate
         shell: bash
         run: |
-          GRADLEW=$(find extracted-project -type f -name gradlew | head -n 1)
-          if [ -z "$GRADLEW" ]; then
-            echo "gradlew not found inside project ZIP"
+          SETTINGS=$(find extracted-project -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "settings.gradle not found inside project ZIP"
             exit 1
           fi
-          PROJECT_DIR=$(dirname "$GRADLEW")
+          PROJECT_DIR=$(dirname "$SETTINGS")
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          chmod +x "$GRADLEW"
           echo "Using Gradle project at $PROJECT_DIR"
 
       - name: Build debug APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
 
       - name: Find APK
         id: apk
