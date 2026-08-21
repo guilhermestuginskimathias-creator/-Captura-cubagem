@@ -1,0 +1,6 @@
+<resources>
+ <style name="Theme.CapturaCubagem" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+  <item name="colorPrimary">#173B57</item><item name="colorPrimaryVariant">#102B40</item><item name="colorSecondary">#2F7D6D</item>
+  <item name="android:fontFamily">sans</item><item name="android:navigationBarColor">#FFFFFF</item><item name="android:statusBarColor">#173B57</item>
+ </style>
+</resources>
