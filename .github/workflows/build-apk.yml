@@ -61,6 +61,18 @@ jobs:
           path = pathlib.Path(sys.argv[1])
           src = path.read_text(encoding="utf-8")
 
+          # Ensure TextView is imported before using the helper.
+          textview_import = "import android.widget.TextView;"
+          if textview_import not in src:
+              lines = src.splitlines()
+              insert_at = 0
+              for i, line in enumerate(lines):
+                  if line.startswith("import "):
+                      insert_at = i + 1
+              lines.insert(insert_at, textview_import)
+              src = "\n".join(lines) + ("\n" if src.endswith("\n") else "")
+              print("Added TextView import to", path)
+
           signature = "TextView tv(String text, int sizeSp, boolean bold)"
           if signature not in src:
               method = r'''
@@ -80,10 +92,11 @@ jobs:
               if pos < 0:
                   raise SystemExit("Could not find class closing brace in MainActivity.java")
               src = src[:pos] + method + src[pos:]
-              path.write_text(src, encoding="utf-8")
               print("Added tv(String, int, boolean) overload to", path)
           else:
               print("TextView helper already present")
+
+          path.write_text(src, encoding="utf-8")
           PY
 
       - name: Fix Android SDK level
