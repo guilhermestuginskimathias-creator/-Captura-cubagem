@@ -1,4 +1,4 @@
-# Workflow corrigido: YAML válido e sem código Java fora de run block
+# Workflow restaurado e recompilação disparada em 2026-08-22
 name: Build Android APK
 
 on:
