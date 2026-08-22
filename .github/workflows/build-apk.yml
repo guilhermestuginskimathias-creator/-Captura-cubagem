@@ -78,7 +78,7 @@ jobs:
 
               <application
                   android:allowBackup="true"
-                  android:label="Captura & Cubagem"
+                  android:label="Captura &amp; Cubagem"
                   android:supportsRtl="true"
                   android:theme="@style/AppTheme">
                   <activity
@@ -92,8 +92,13 @@ jobs:
               </application>
           </manifest>
           EOF
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          project_dir = os.environ.get('PROJECT_DIR')
+          PY
+          python3 -c "import xml.etree.ElementTree as ET; ET.parse('$MANIFEST'); print('AndroidManifest.xml válido')"
           echo "Manifest reparado: $MANIFEST"
-          cat "$MANIFEST"
 
       - name: Build debug APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
