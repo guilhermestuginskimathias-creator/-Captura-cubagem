@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - captura-cubagem-pro-v2
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
