@@ -1,4 +1,4 @@
-# Workflow de compilação do APK
+# Workflow de compilação do APK profissional
 name: Build Android APK
 
 on:
@@ -48,6 +48,25 @@ jobs:
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
           echo "Gradle project: $PROJECT_DIR"
 
+      - name: Apply professional interface
+        shell: bash
+        run: |
+          set -e
+          PROJECT_DIR="${{ steps.locate.outputs.project_dir }}"
+          MAIN=$(find "$PROJECT_DIR/app/src/main/java" -type f -name MainActivity.java | head -n 1)
+          if [ -z "$MAIN" ]; then
+            echo "MainActivity.java not found"
+            exit 1
+          fi
+          PACKAGE=$(sed -n -E 's/^package[[:space:]]+([^;]+);/\1/p' "$MAIN" | head -n 1)
+          if [ -z "$PACKAGE" ]; then
+            echo "Package not found in MainActivity.java"
+            exit 1
+          fi
+          sed "s/__PACKAGE__/$PACKAGE/g" professional/MainActivity.java.template > "$MAIN"
+          grep -q "CUBAGEM 68 PRO" "$MAIN"
+          echo "Professional interface applied to $MAIN"
+
       - name: Fix Android SDK level
         shell: bash
         run: |
@@ -64,25 +83,25 @@ jobs:
         run: |
           set -e
           PROJECT_DIR="${{ steps.locate.outputs.project_dir }}"
+          MAIN=$(find "$PROJECT_DIR/app/src/main/java" -type f -name MainActivity.java | head -n 1)
+          PACKAGE=$(sed -n -E 's/^package[[:space:]]+([^;]+);/\1/p' "$MAIN" | head -n 1)
           MANIFEST="$PROJECT_DIR/app/src/main/AndroidManifest.xml"
           mkdir -p "$(dirname "$MANIFEST")"
-          cat > "$MANIFEST" <<'EOF'
+          cat > "$MANIFEST" <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.CAMERA" />
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-
               <uses-feature android:name="android.hardware.camera" android:required="false" />
-
               <application
                   android:allowBackup="true"
-                  android:label="Captura &amp; Cubagem"
+                  android:label="Cubagem 68 Pro"
                   android:supportsRtl="true"
                   android:theme="@style/AppTheme">
                   <activity
-                      android:name="com.didoflores.capturacubagem.MainActivity"
+                      android:name="$PACKAGE.MainActivity"
                       android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -92,13 +111,7 @@ jobs:
               </application>
           </manifest>
           EOF
-          python3 - <<'PY'
-          import os
-          import xml.etree.ElementTree as ET
-          project_dir = os.environ.get('PROJECT_DIR')
-          PY
           python3 -c "import xml.etree.ElementTree as ET; ET.parse('$MANIFEST'); print('AndroidManifest.xml válido')"
-          echo "Manifest reparado: $MANIFEST"
 
       - name: Build debug APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
@@ -120,6 +133,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cubagem68Pro-APK
+          name: Cubagem68Pro-NOVA-VERSAO
           path: ${{ steps.apk.outputs.apk_path }}
           if-no-files-found: error
