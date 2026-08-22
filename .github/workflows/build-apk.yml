@@ -1,3 +1,4 @@
+# Workflow corrigido: YAML válido e sem código Java fora de run block
 name: Build Android APK
 
 on:
