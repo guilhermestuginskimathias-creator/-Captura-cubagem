@@ -1,4 +1,4 @@
-# Workflow restaurado e recompilação disparada em 2026-08-22
+# Workflow de compilação do APK
 name: Build Android APK
 
 on:
@@ -58,6 +58,42 @@ jobs:
             sed -i -E 's/(compileSdk[[:space:]]*=[[:space:]]*)[0-9]+/\135/g' "$FILE"
             sed -i -E 's/(compileSdk[[:space:]]+)[0-9]+/\135/g' "$FILE"
           done
+
+      - name: Repair AndroidManifest XML
+        shell: bash
+        run: |
+          set -e
+          PROJECT_DIR="${{ steps.locate.outputs.project_dir }}"
+          MANIFEST="$PROJECT_DIR/app/src/main/AndroidManifest.xml"
+          mkdir -p "$(dirname "$MANIFEST")"
+          cat > "$MANIFEST" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.CAMERA" />
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+              <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="Captura & Cubagem"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme">
+                  <activity
+                      android:name="com.didoflores.capturacubagem.MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          echo "Manifest reparado: $MANIFEST"
+          cat "$MANIFEST"
 
       - name: Build debug APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
