@@ -1,15 +1,25 @@
 package __PACKAGE__;
 
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.pdf.PdfDocument;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Base64;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -18,188 +28,107 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
-    private static final int REQ_ITEM_CAMERA = 100;
-    private static final int REQ_ITEM_GALLERY = 101;
-    private static final int REQ_CARD_CAMERA = 102;
-    private static final int REQ_CARD_GALLERY = 103;
-    private static final double CONTAINER_CAPACITY = 68.0;
+    private static final int ITEM_CAM=100,ITEM_GAL=101,CARD_CAM=102,CARD_GAL=103;
+    private static final double CAP=68.0;
+    private EditText name,code,price,len,wid,hei,weight,qty;
+    private TextView unitVol,totalVol,status,remaining,count;
+    private ImageView itemPreview,cardPreview;
+    private LinearLayout list;
+    private Bitmap itemBmp,cardBmp;
+    private JSONArray items=new JSONArray();
 
-    private EditText name, length, width, height, weight, quantity;
-    private TextView unitVolume, totalVolume, containerStatus;
-    private ImageView itemPreview, cardPreview;
+    @Override public void onCreate(Bundle b){super.onCreate(b);load();setTitle("Cubagem 68 Pro");setContentView(screen());refresh();}
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setTitle("Cubagem 68 Pro");
-        setContentView(buildScreen());
+    private View screen(){
+        ScrollView sc=new ScrollView(this); sc.setFillViewport(true); sc.setBackgroundColor(Color.rgb(246,248,251));
+        LinearLayout root=col(); root.setPadding(dp(16),dp(20),dp(16),dp(30)); sc.addView(root);
+        root.addView(txt("CUBAGEM 68 PRO",26,true,Color.rgb(20,32,51)));
+        TextView sub=txt("Catálogo de produtos e controle do container",14,false,Color.GRAY);sub.setPadding(0,dp(3),0,dp(16));root.addView(sub);
+
+        LinearLayout pc=card(); pc.addView(txt("CONTAINER 68 m³",12,true,Color.GRAY));
+        status=txt("0,000 m³ de 68,000 m³",22,true,Color.rgb(17,24,39));status.setPadding(0,dp(6),0,dp(3));pc.addView(status);
+        remaining=txt("Restam 68,000 m³",14,true,Color.rgb(35,99,235));pc.addView(remaining);root.addView(pc);space(root,14);
+
+        LinearLayout prod=card();prod.addView(section("Produto"));name=field("Nome do produto");prod.addView(name);space(prod,9);
+        LinearLayout cp=row();code=field("Código");price=num("Preço");cp.addView(code,wp());hspace(cp,8);cp.addView(price,wp());prod.addView(cp);space(prod,10);
+        LinearLayout pb=row();pb.addView(btn("📷 Tirar foto",true,v->camera(ITEM_CAM)),wp());hspace(pb,8);pb.addView(btn("Galeria",false,v->gallery(ITEM_GAL)),wp());prod.addView(pb);
+        itemPreview=preview();prod.addView(itemPreview);root.addView(prod);space(root,14);
+
+        LinearLayout mc=card();mc.addView(section("Medidas e cubagem"));
+        TextView hint=txt("Informe as medidas da embalagem em centímetros. A cubagem é automática.",12,false,Color.GRAY);hint.setPadding(0,0,0,dp(10));mc.addView(hint);
+        LinearLayout r1=row();len=num("Comprimento cm");wid=num("Largura cm");r1.addView(len,wp());hspace(r1,8);r1.addView(wid,wp());mc.addView(r1);space(mc,8);
+        LinearLayout r2=row();hei=num("Altura cm");weight=num("Peso kg");r2.addView(hei,wp());hspace(r2,8);r2.addView(weight,wp());mc.addView(r2);space(mc,8);
+        qty=num("Quantidade");qty.setText("1");mc.addView(qty);space(mc,12);
+        LinearLayout vb=col();vb.setPadding(dp(12),dp(11),dp(12),dp(11));vb.setBackground(shape(Color.rgb(239,246,255),14,0,0));
+        unitVol=txt("Cubagem unitária: 0,000000 m³",15,true,Color.rgb(30,64,175));totalVol=txt("Cubagem total: 0,000000 m³",17,true,Color.rgb(30,64,175));vb.addView(unitVol);vb.addView(totalVol);mc.addView(vb);root.addView(mc);space(root,14);
+
+        LinearLayout cc=card();cc.addView(section("Cartão de visita do fornecedor"));LinearLayout cb=row();cb.addView(btn("📷 Fotografar",true,v->camera(CARD_CAM)),wp());hspace(cb,8);cb.addView(btn("Selecionar",false,v->gallery(CARD_GAL)),wp());cc.addView(cb);cardPreview=preview();cc.addView(cardPreview);root.addView(cc);space(root,16);
+
+        Button save=btn("SALVAR ITEM NO CATÁLOGO",true,v->save());save.setMinHeight(dp(56));save.setTextSize(16);root.addView(save);space(root,18);
+        LinearLayout cat=card();count=txt("CATÁLOGO",19,true,Color.rgb(31,41,55));cat.addView(count);space(cat,10);
+        LinearLayout ex=row();ex.addView(btn("📄 Gerar PDF",true,v->pdf()),wp());hspace(ex,8);ex.addView(btn("Limpar tudo",false,v->clearAll()),wp());cat.addView(ex);space(cat,12);list=col();cat.addView(list);root.addView(cat);
+
+        TextWatcher tw=new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int c,int a){}public void onTextChanged(CharSequence s,int st,int b,int c){calc();}public void afterTextChanged(Editable e){}};
+        len.addTextChangedListener(tw);wid.addTextChangedListener(tw);hei.addTextChangedListener(tw);qty.addTextChangedListener(tw);return sc;
     }
 
-    private View buildScreen() {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(246, 248, 251));
-        LinearLayout root = column();
-        root.setPadding(dp(18), dp(22), dp(18), dp(30));
-        scroll.addView(root);
+    private void calc(){double u=(v(len)*v(wid)*v(hei))/1000000.0,t=u*Math.max(1,v(qty));unitVol.setText(f("Cubagem unitária: %.6f m³",u));totalVol.setText(f("Cubagem total: %.6f m³",t));}
+    private double v(EditText e){try{return Double.parseDouble(e.getText().toString().trim().replace(',','.'));}catch(Exception x){return 0;}}
 
-        TextView title = text("CUBAGEM 68 PRO • NOVA VERSÃO", 25, true, Color.rgb(20, 32, 51));
-        root.addView(title);
-        TextView subtitle = text("Produtos, fotos, cubagem e controle do container", 15, false, Color.rgb(105, 116, 130));
-        subtitle.setPadding(0, dp(4), 0, dp(18));
-        root.addView(subtitle);
-
-        LinearLayout progressCard = card();
-        progressCard.addView(text("CONTAINER 68 m³", 13, true, Color.rgb(102, 112, 128)));
-        containerStatus = text("0,000 m³ de 68,000 m³", 22, true, Color.rgb(17, 24, 39));
-        containerStatus.setPadding(0, dp(6), 0, 0);
-        progressCard.addView(containerStatus);
-        root.addView(progressCard);
-        spacer(root, 14);
-
-        LinearLayout productCard = card();
-        productCard.addView(section("Produto"));
-        name = field("Nome do produto");
-        productCard.addView(name);
-        spacer(productCard, 10);
-        LinearLayout photoButtons = row();
-        photoButtons.addView(actionButton("📷 Tirar foto", true, v -> launchCamera(REQ_ITEM_CAMERA)), weightParams());
-        spacerHorizontal(photoButtons, 8);
-        photoButtons.addView(actionButton("Galeria", false, v -> launchGallery(REQ_ITEM_GALLERY)), weightParams());
-        productCard.addView(photoButtons);
-        itemPreview = preview();
-        productCard.addView(itemPreview);
-        root.addView(productCard);
-        spacer(root, 14);
-
-        LinearLayout measureCard = card();
-        measureCard.addView(section("Medidas e cubagem"));
-        TextView hint = text("Informe as medidas em centímetros. A cubagem é automática.", 13, false, Color.rgb(107, 114, 128));
-        hint.setPadding(0, 0, 0, dp(10));
-        measureCard.addView(hint);
-        LinearLayout r1 = row();
-        length = numberField("Comprimento");
-        width = numberField("Largura");
-        r1.addView(length, weightParams());
-        spacerHorizontal(r1, 8);
-        r1.addView(width, weightParams());
-        measureCard.addView(r1);
-        spacer(measureCard, 8);
-        LinearLayout r2 = row();
-        height = numberField("Altura");
-        weight = numberField("Peso kg");
-        r2.addView(height, weightParams());
-        spacerHorizontal(r2, 8);
-        r2.addView(weight, weightParams());
-        measureCard.addView(r2);
-        spacer(measureCard, 8);
-        quantity = numberField("Quantidade");
-        quantity.setText("1");
-        measureCard.addView(quantity);
-        spacer(measureCard, 14);
-        LinearLayout volumeBox = column();
-        volumeBox.setPadding(dp(14), dp(12), dp(14), dp(12));
-        volumeBox.setBackground(roundRect(Color.rgb(239, 246, 255), 14, 0, 0));
-        unitVolume = text("Cubagem unitária: 0,000000 m³", 16, true, Color.rgb(30, 64, 175));
-        totalVolume = text("Cubagem total: 0,000000 m³", 18, true, Color.rgb(30, 64, 175));
-        volumeBox.addView(unitVolume);
-        volumeBox.addView(totalVolume);
-        measureCard.addView(volumeBox);
-        root.addView(measureCard);
-        spacer(root, 14);
-
-        LinearLayout cardCard = card();
-        cardCard.addView(section("Cartão de visita do fornecedor"));
-        LinearLayout cardButtons = row();
-        cardButtons.addView(actionButton("📷 Fotografar", true, v -> launchCamera(REQ_CARD_CAMERA)), weightParams());
-        spacerHorizontal(cardButtons, 8);
-        cardButtons.addView(actionButton("Selecionar", false, v -> launchGallery(REQ_CARD_GALLERY)), weightParams());
-        cardCard.addView(cardButtons);
-        cardPreview = preview();
-        cardCard.addView(cardPreview);
-        root.addView(cardCard);
-        spacer(root, 18);
-
-        Button save = actionButton("SALVAR ITEM NO CATÁLOGO", true, v -> saveItem());
-        save.setTextSize(17);
-        save.setMinHeight(dp(56));
-        root.addView(save);
-
-        TextWatcher watcher = new TextWatcher() {
-            public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-            public void onTextChanged(CharSequence s, int st, int b, int c) { recalc(); }
-            public void afterTextChanged(Editable e) {}
-        };
-        length.addTextChangedListener(watcher);
-        width.addTextChangedListener(watcher);
-        height.addTextChangedListener(watcher);
-        quantity.addTextChangedListener(watcher);
-        return scroll;
+    private void save(){
+        String n=name.getText().toString().trim();double l=v(len),w=v(wid),h=v(hei),q=Math.max(1,v(qty));
+        if(n.isEmpty()){toast("Informe o nome do produto");return;}if(l<=0||w<=0||h<=0){toast("Informe comprimento, largura e altura");return;}
+        try{JSONObject o=new JSONObject();double u=l*w*h/1000000.0;o.put("name",n);o.put("code",code.getText().toString().trim());o.put("price",v(price));o.put("length",l);o.put("width",w);o.put("height",h);o.put("weight",v(weight));o.put("quantity",q);o.put("unitVolume",u);o.put("totalVolume",u*q);o.put("photo",b64(itemBmp));o.put("card",b64(cardBmp));items.put(o);persist();refresh();clearForm();toast("Item salvo no catálogo");}catch(Exception x){toast("Erro ao salvar");}
     }
 
-    private void recalc() {
-        double l = val(length), w = val(width), h = val(height);
-        double q = Math.max(1, val(quantity));
-        double unit = (l * w * h) / 1000000.0;
-        double total = unit * q;
-        unitVolume.setText(String.format(java.util.Locale.US, "Cubagem unitária: %.6f m³", unit).replace('.', ','));
-        totalVolume.setText(String.format(java.util.Locale.US, "Cubagem total: %.6f m³", total).replace('.', ','));
-        double pct = Math.min(100.0, (total / CONTAINER_CAPACITY) * 100.0);
-        containerStatus.setText(String.format(java.util.Locale.US, "%.3f m³ de 68,000 m³ • %.1f%%", total, pct).replace('.', ','));
+    private void load(){try{items=new JSONArray(getSharedPreferences("cubagem68",MODE_PRIVATE).getString("items","[]"));}catch(Exception x){items=new JSONArray();}}
+    private void persist(){getSharedPreferences("cubagem68",MODE_PRIVATE).edit().putString("items",items.toString()).apply();}
+    private void refresh(){
+        if(list==null)return;list.removeAllViews();double used=0;for(int i=0;i<items.length();i++)try{used+=items.getJSONObject(i).optDouble("totalVolume");}catch(Exception x){}
+        double rem=Math.max(0,CAP-used),pct=Math.min(100,used/CAP*100);status.setText(f("%.3f m³ de 68,000 m³ • %.1f%%",used,pct));remaining.setText(f("Restam %.3f m³",rem));count.setText("CATÁLOGO • "+items.length()+" ITEM"+(items.length()==1?"":"S"));
+        if(items.length()==0){list.addView(txt("Nenhum produto salvo ainda.",13,false,Color.GRAY));return;}
+        for(int i=items.length()-1;i>=0;i--)try{JSONObject o=items.getJSONObject(i);final int k=i;LinearLayout line=col();line.setPadding(dp(10),dp(10),dp(10),dp(10));line.setBackground(shape(Color.rgb(249,250,251),12,Color.rgb(229,233,239),1));String c=o.optString("code","");line.addView(txt(o.optString("name","Produto")+(c.isEmpty()?"":" • "+c),15,true,Color.rgb(31,41,55)));line.addView(txt(f("Qtd %.0f • %.3f m³ • R$ %.2f",o.optDouble("quantity",1),o.optDouble("totalVolume"),o.optDouble("price")),12,false,Color.GRAY));Button d=btn("Excluir",false,v->del(k));d.setMinHeight(dp(38));line.addView(d);list.addView(line);space(list,8);}catch(Exception x){}
     }
+    private void del(int k){JSONArray n=new JSONArray();for(int i=0;i<items.length();i++)if(i!=k)try{n.put(items.get(i));}catch(Exception x){}items=n;persist();refresh();}
+    private void clearAll(){items=new JSONArray();persist();refresh();toast("Catálogo limpo");}
+    private void clearForm(){name.setText("");code.setText("");price.setText("");len.setText("");wid.setText("");hei.setText("");weight.setText("");qty.setText("1");itemBmp=null;cardBmp=null;itemPreview.setVisibility(View.GONE);cardPreview.setVisibility(View.GONE);}
 
-    private double val(EditText e) {
-        try { return Double.parseDouble(e.getText().toString().trim().replace(',', '.')); }
-        catch (Exception ex) { return 0; }
+    private void pdf(){
+        if(items.length()==0){toast("Salve pelo menos um produto primeiro");return;}PdfDocument d=new PdfDocument();Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);int W=595,H=842,m=36,y=42,n=1;PdfDocument.Page pg=d.startPage(new PdfDocument.PageInfo.Builder(W,H,n).create());Canvas c=pg.getCanvas();y=header(c,p,y);
+        for(int i=0;i<items.length();i++)try{JSONObject o=items.getJSONObject(i);if(y+155>H-40){d.finishPage(pg);n++;pg=d.startPage(new PdfDocument.PageInfo.Builder(W,H,n).create());c=pg.getCanvas();y=header(c,p,42);}p.setColor(Color.rgb(31,41,55));p.setTextSize(14);p.setTypeface(Typeface.DEFAULT_BOLD);c.drawText((i+1)+". "+o.optString("name","Produto"),m,y,p);y+=20;p.setTypeface(Typeface.DEFAULT);p.setTextSize(10);p.setColor(Color.DKGRAY);c.drawText("Código: "+o.optString("code","-")+"   Preço: R$ "+f("%.2f",o.optDouble("price")),m,y,p);y+=16;c.drawText(f("%.1f x %.1f x %.1f cm   Peso %.2f kg   Qtd %.0f",o.optDouble("length"),o.optDouble("width"),o.optDouble("height"),o.optDouble("weight"),o.optDouble("quantity")),m,y,p);y+=16;c.drawText(f("Cubagem total: %.6f m³",o.optDouble("totalVolume")),m,y,p);y+=12;Bitmap b=from64(o.optString("photo",""));if(b!=null){Bitmap s=scale(b,110,80);c.drawBitmap(s,m,y+5,p);y+=90;}else y+=18;p.setColor(Color.LTGRAY);c.drawLine(m,y,W-m,y,p);y+=18;}catch(Exception x){}
+        try{d.finishPage(pg);String fn="Catalogo_Cubagem68_"+System.currentTimeMillis()+".pdf";ContentValues cv=new ContentValues();cv.put(MediaStore.MediaColumns.DISPLAY_NAME,fn);cv.put(MediaStore.MediaColumns.MIME_TYPE,"application/pdf");Uri uri;if(Build.VERSION.SDK_INT>=29){cv.put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS);uri=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,cv);}else uri=getContentResolver().insert(MediaStore.Files.getContentUri("external"),cv);if(uri==null)throw new Exception();OutputStream out=getContentResolver().openOutputStream(uri);d.writeTo(out);if(out!=null)out.close();d.close();Intent it=new Intent(Intent.ACTION_VIEW);it.setDataAndType(uri,"application/pdf");it.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);try{startActivity(it);}catch(Exception x){toast("PDF salvo em Downloads");}}catch(Exception x){try{d.close();}catch(Exception z){}toast("Erro ao gerar PDF");}
     }
+    private int header(Canvas c,Paint p,int y){p.setColor(Color.rgb(20,32,51));p.setTextSize(20);p.setTypeface(Typeface.DEFAULT_BOLD);c.drawText("CUBAGEM 68 PRO — CATÁLOGO",36,y,p);y+=24;p.setTextSize(10);p.setTypeface(Typeface.DEFAULT);p.setColor(Color.DKGRAY);c.drawText("Produtos salvos e cubagem do container de 68 m³",36,y,p);return y+24;}
 
-    private void saveItem() {
-        if (name.getText().toString().trim().isEmpty()) {
-            Toast.makeText(this, "Informe o nome do produto", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Toast.makeText(this, "Item salvo no catálogo", Toast.LENGTH_LONG).show();
-    }
+    private void camera(int r){Intent i=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);if(i.resolveActivity(getPackageManager())!=null)startActivityForResult(i,r);else toast("Câmera não disponível");}
+    private void gallery(int r){Intent i=new Intent(Intent.ACTION_GET_CONTENT);i.setType("image/*");startActivityForResult(Intent.createChooser(i,"Selecionar imagem"),r);}
+    @Override protected void onActivityResult(int r,int result,Intent data){super.onActivityResult(r,result,data);if(result!=RESULT_OK||data==null)return;try{Bitmap b=null;if(r==ITEM_CAM||r==CARD_CAM){Object x=data.getExtras()!=null?data.getExtras().get("data"):null;if(x instanceof Bitmap)b=(Bitmap)x;}else if(data.getData()!=null){InputStream in=getContentResolver().openInputStream(data.getData());b=BitmapFactory.decodeStream(in);if(in!=null)in.close();}if(b==null){toast("Não foi possível abrir a imagem");return;}b=scale(b,1000,1000);if(r==CARD_CAM||r==CARD_GAL){cardBmp=b;cardPreview.setImageBitmap(b);cardPreview.setVisibility(View.VISIBLE);}else{itemBmp=b;itemPreview.setImageBitmap(b);itemPreview.setVisibility(View.VISIBLE);}}catch(Exception x){toast("Erro ao carregar imagem");}}
+    private String b64(Bitmap b){if(b==null)return "";try{ByteArrayOutputStream o=new ByteArrayOutputStream();scale(b,700,700).compress(Bitmap.CompressFormat.JPEG,68,o);return Base64.encodeToString(o.toByteArray(),Base64.NO_WRAP);}catch(Exception x){return "";}}
+    private Bitmap from64(String s){if(s==null||s.isEmpty())return null;try{byte[] b=Base64.decode(s,Base64.DEFAULT);return BitmapFactory.decodeByteArray(b,0,b.length);}catch(Exception x){return null;}}
+    private Bitmap scale(Bitmap b,int mw,int mh){float r=Math.min((float)mw/b.getWidth(),(float)mh/b.getHeight());if(r>=1)return b;return Bitmap.createScaledBitmap(b,Math.max(1,Math.round(b.getWidth()*r)),Math.max(1,Math.round(b.getHeight()*r)),true);}
 
-    private void launchCamera(int requestCode) {
-        Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (i.resolveActivity(getPackageManager()) != null) startActivityForResult(i, requestCode);
-    }
-
-    private void launchGallery(int requestCode) {
-        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-        i.setType("image/*");
-        startActivityForResult(Intent.createChooser(i, "Selecionar imagem"), requestCode);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK || data == null) return;
-        ImageView target = (requestCode == REQ_CARD_CAMERA || requestCode == REQ_CARD_GALLERY) ? cardPreview : itemPreview;
-        try {
-            if (requestCode == REQ_ITEM_CAMERA || requestCode == REQ_CARD_CAMERA) {
-                Bitmap bmp = (Bitmap) data.getExtras().get("data");
-                target.setImageBitmap(bmp);
-            } else if (data.getData() != null) target.setImageURI(data.getData());
-            target.setVisibility(View.VISIBLE);
-        } catch (Exception ignored) {}
-    }
-
-    private LinearLayout column() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
-    private LinearLayout row() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.HORIZONTAL); return l; }
-    private LinearLayout card() { LinearLayout l = column(); l.setPadding(dp(16),dp(16),dp(16),dp(16)); l.setBackground(roundRect(Color.WHITE,18,Color.rgb(229,233,239),1)); return l; }
-    private TextView section(String s) { TextView t=text(s,19,true,Color.rgb(31,41,55)); t.setPadding(0,0,0,dp(12)); return t; }
-    private EditText field(String hint) { EditText e=new EditText(this); e.setHint(hint); e.setTextSize(16); e.setSingleLine(true); e.setPadding(dp(14),0,dp(14),0); e.setMinHeight(dp(52)); e.setBackground(roundRect(Color.rgb(249,250,251),13,Color.rgb(218,223,230),1)); return e; }
-    private EditText numberField(String hint) { EditText e=field(hint); e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); return e; }
-    private Button actionButton(String label, boolean primary, View.OnClickListener listener) { Button b=new Button(this); b.setText(label); b.setAllCaps(false); b.setTypeface(Typeface.DEFAULT_BOLD); b.setTextColor(primary?Color.WHITE:Color.rgb(36,46,61)); b.setBackground(roundRect(primary?Color.rgb(35,99,235):Color.WHITE,14,Color.rgb(210,216,224),1)); b.setOnClickListener(listener); b.setMinHeight(dp(50)); return b; }
-    private TextView text(String s,int sp,boolean bold,int color) { TextView t=new TextView(this); t.setText(s); t.setTextSize(sp); t.setTextColor(color); if(bold)t.setTypeface(Typeface.DEFAULT_BOLD); return t; }
-    private ImageView preview() { ImageView iv=new ImageView(this); iv.setAdjustViewBounds(true); iv.setScaleType(ImageView.ScaleType.CENTER_CROP); iv.setVisibility(View.GONE); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(180)); p.topMargin=dp(10); iv.setLayoutParams(p); return iv; }
-    private GradientDrawable roundRect(int fill,int radiusDp,int stroke,int strokeDp) { GradientDrawable g=new GradientDrawable(); g.setColor(fill); g.setCornerRadius(dp(radiusDp)); if(strokeDp>0)g.setStroke(dp(strokeDp),stroke); return g; }
-    private LinearLayout.LayoutParams weightParams() { return new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1f); }
-    private void spacer(LinearLayout l,int x) { l.addView(new View(this),new LinearLayout.LayoutParams(1,dp(x))); }
-    private void spacerHorizontal(LinearLayout l,int x) { l.addView(new View(this),new LinearLayout.LayoutParams(dp(x),1)); }
-    private int dp(int v) { return Math.round(v*getResources().getDisplayMetrics().density); }
+    private String f(String s,Object...a){return String.format(Locale.US,s,a).replace('.',',');}
+    private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
+    private LinearLayout col(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
+    private LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.HORIZONTAL);return l;}
+    private LinearLayout card(){LinearLayout l=col();l.setPadding(dp(16),dp(16),dp(16),dp(16));l.setBackground(shape(Color.WHITE,18,Color.rgb(229,233,239),1));return l;}
+    private TextView section(String s){TextView t=txt(s,19,true,Color.rgb(31,41,55));t.setPadding(0,0,0,dp(12));return t;}
+    private EditText field(String h){EditText e=new EditText(this);e.setHint(h);e.setTextSize(15);e.setSingleLine(true);e.setPadding(dp(12),0,dp(12),0);e.setMinHeight(dp(52));e.setBackground(shape(Color.rgb(249,250,251),13,Color.rgb(218,223,230),1));return e;}
+    private EditText num(String h){EditText e=field(h);e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);return e;}
+    private Button btn(String s,boolean primary,View.OnClickListener l){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTypeface(Typeface.DEFAULT_BOLD);b.setTextColor(primary?Color.WHITE:Color.rgb(36,46,61));b.setBackground(shape(primary?Color.rgb(35,99,235):Color.WHITE,14,Color.rgb(210,216,224),1));b.setOnClickListener(l);b.setMinHeight(dp(48));return b;}
+    private TextView txt(String s,int size,boolean bold,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.DEFAULT_BOLD);return t;}
+    private ImageView preview(){ImageView i=new ImageView(this);i.setScaleType(ImageView.ScaleType.CENTER_CROP);i.setVisibility(View.GONE);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(180));p.topMargin=dp(10);i.setLayoutParams(p);return i;}
+    private GradientDrawable shape(int fill,int rad,int stroke,int sw){GradientDrawable g=new GradientDrawable();g.setColor(fill);g.setCornerRadius(dp(rad));if(sw>0)g.setStroke(dp(sw),stroke);return g;}
+    private LinearLayout.LayoutParams wp(){return new LinearLayout.LayoutParams(0,-2,1);}
+    private void space(LinearLayout l,int n){l.addView(new View(this),new LinearLayout.LayoutParams(1,dp(n)));}
+    private void hspace(LinearLayout l,int n){l.addView(new View(this),new LinearLayout.LayoutParams(dp(n),1));}
+    private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
 }
